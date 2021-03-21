@@ -1,33 +1,55 @@
 package tgForward
 
 import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"github.com/Logiase/MiraiGo-Template/bot"
 	"github.com/Logiase/MiraiGo-Template/config"
 	"github.com/Logiase/MiraiGo-Template/utils"
 	"github.com/Mrs4s/MiraiGo/client"
 	"github.com/Mrs4s/MiraiGo/message"
+	"github.com/kolesa-team/go-webp/decoder"
+	_ "github.com/kolesa-team/go-webp/decoder"
+	"github.com/kolesa-team/go-webp/webp"
 	tb "gopkg.in/tucnak/telebot.v2"
+	"image/jpeg"
+	"io/ioutil"
 	"log"
+	"net/http"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
 
 type tgForward struct {
-	
 }
+
 var logger = utils.GetModuleLogger("external.TGForward")
-var GroupMap = make(map[int64]int64)
+
+type QGroupInfo struct {
+	QQNumber int64
+	Flag     bool
+}
+
+var GroupMap = make(map[int64]*tb.Chat)     //QQGroup-> TGChat Object
+var GroupFlag = make(map[int64]*QGroupInfo) //TGGroup-> Flag
 
 type groupConfig struct {
 	QQ int64 `yaml:"QQ"`
 	TG int64 `yaml:"TG"`
 }
+
+var MDReplace = strings.NewReplacer("_", "\\_", "*", "\\*", "[", "\\[", "]", "\\]", "(", "\\(", ")", "\\)", "~", "\\~", "`", "\\`", ">", "\\>", "#", "\\#", "+", "\\+", "-", "\\-", "=", "\\=", "|", "\\|", "{", "\\{", "}", "\\}", ".", "\\.", "!", "\\!")
+
 func (m *tgForward) Init() {
 	var err error
 	Bot, err = tb.NewBot(tb.Settings{
 		// You can also set custom API URL.
 		// If field is empty it equals to "https://api.telegram.org".
-		URL: config.GlobalConfig.GetString("Telegram.APIAddr"),
+		URL:    config.GlobalConfig.GetString("Telegram.APIAddr"),
 		Token:  config.GlobalConfig.GetString("Telegram.token"),
 		Poller: &tb.LongPoller{Timeout: 10 * time.Second},
 	})
@@ -35,51 +57,414 @@ func (m *tgForward) Init() {
 		log.Fatal(err)
 		return
 	}
+	Bot.Handle("/on", func(m *tb.Message) {
+		GroupFlag[m.Chat.ID].Flag = true
+		_, _ = Bot.Send(m.Sender, "通讯已恢复")
+
+	})
+	Bot.Handle("/off", func(m *tb.Message) {
+		GroupFlag[m.Chat.ID].Flag = false
+		_, _ = Bot.Send(m.Sender, "不明力量截断了电波")
+
+	})
+
 	var grouplists []groupConfig
-	err=config.GlobalConfig.UnmarshalKey("Groups",&grouplists)
+	err = config.GlobalConfig.UnmarshalKey("Groups", &grouplists)
 	if err != nil {
 		logger.Error("Group Lists Fail to Parse")
 	}
-	for _,groupInfo:=range grouplists{
-		GroupMap[groupInfo.QQ]=groupInfo.TG
+
+	for _, groupInfo := range grouplists {
+		tgChat, err := Bot.ChatByID(strconv.FormatInt(groupInfo.TG, 10))
+		if err != nil {
+			logger.Error("Group Fail to Parse:", groupInfo.TG)
+		}
+
+		GroupMap[groupInfo.QQ] = tgChat
+		GroupFlag[groupInfo.TG] = &QGroupInfo{
+			Flag: true, QQNumber: groupInfo.QQ,
+		}
+
 	}
-	
+
 }
 
 func (m *tgForward) PostInit() {
-logger.Info("Init Finish")}
-
+	logger.Info("Init Finish")
+}
+func getReplyText(m *tb.Message) (string, error) {
+	if strings.HasPrefix(m.Text, "//") || strings.HasPrefix(m.Caption, "//") {
+		return "", errors.New("stop")
+	}
+	reply := m
+	typeStr := ""
+	if reply.Photo != nil {
+		typeStr += "[Photo] "
+	}
+	if reply.Sticker != nil {
+		typeStr += "[Sticker] "
+	}
+	replyText := fmt.Sprintf("%s %s :%s%s %s\n-------\n", reply.Sender.FirstName, reply.Sender.LastName, typeStr, reply.Text, reply.Caption)
+	return replyText, nil
+}
 func (m *tgForward) Serve(bot *bot.Bot) {
-	//panic("implement me")
+	//go getUpdates(Bot.Updates,bot)
+
+	Bot.Handle(tb.OnText, func(m *tb.Message) {
+		if m.Chat.Type != tb.ChatGroup && m.Chat.Type != tb.ChatSuperGroup {
+			return
+		}
+		QInfo, ok := GroupFlag[m.Chat.ID]
+		if !ok || (ok && !QInfo.Flag) {
+			return
+		}
+		if strings.HasPrefix(m.Text, "//") {
+			return
+		}
+		replyText := ""
+		if m.ReplyTo != nil {
+			var err error
+			replyText, err = getReplyText(m.ReplyTo)
+			if err != nil {
+				return
+			}
+		}
+
+		go bot.SendGroupMessage(QInfo.QQNumber, &message.SendingMessage{Elements: []message.IMessageElement{message.NewText(fmt.Sprintf("%s%s %s :%s", replyText, m.Sender.FirstName, m.Sender.LastName, m.Text))}})
+
+	})
+	Bot.Handle(tb.OnDocument, func(m *tb.Message) {
+		if m.Chat.Type != tb.ChatGroup && m.Chat.Type != tb.ChatSuperGroup {
+			return
+		}
+		QInfo, ok := GroupFlag[m.Chat.ID]
+		if !ok || (ok && !QInfo.Flag) {
+			return
+		}
+		if strings.HasPrefix(m.Text, "//") || strings.HasPrefix(m.Caption, "//") {
+			return
+		}
+		file := m.Document
+		fmt.Println(file.MIME)
+		if strings.Contains(file.MIME, "image") {
+			go func() {
+				data, err := Bot.GetFile(&file.File)
+				if err != nil {
+					logger.Error(err)
+				}
+
+				var dataB []byte
+				if strings.HasSuffix(file.File.FilePath, ".webp") {
+					pic, err := webp.Decode(data, &decoder.Options{})
+					if err != nil {
+						logger.Error(err)
+					}
+					buf := new(bytes.Buffer)
+					err = jpeg.Encode(buf, pic, &jpeg.Options{})
+					dataB = buf.Bytes()
+				} else {
+					dataB, err = ioutil.ReadAll(data)
+					if err != nil {
+						logger.Error(err)
+					}
+				}
+
+				GroupImage, err := bot.UploadGroupImage(QInfo.QQNumber, bytes.NewReader(dataB))
+				if err != nil {
+					logger.Error(err)
+				}
+				go bot.SendGroupMessage(QInfo.QQNumber, &message.SendingMessage{Elements: []message.IMessageElement{message.NewText(fmt.Sprintf("%s %s :发送图片 %s", m.Sender.FirstName, m.Sender.LastName, m.Caption)), GroupImage}})
+
+			}()
+		}
+
+	})
+
+	Bot.Handle(tb.OnPhoto, func(m *tb.Message) {
+		if m.Chat.Type != tb.ChatGroup && m.Chat.Type != tb.ChatSuperGroup {
+			return
+		}
+		QInfo, ok := GroupFlag[m.Chat.ID]
+		if !ok || (ok && !QInfo.Flag) {
+			return
+		}
+		if strings.HasPrefix(m.Text, "//") || strings.HasPrefix(m.Caption, "//") {
+			return
+		}
+		replyText := ""
+		if m.ReplyTo != nil {
+			var err error
+			replyText, err = getReplyText(m.ReplyTo)
+			if err != nil {
+				return
+			}
+		}
+
+		go func() {
+			data, err := Bot.GetFile(&m.Photo.File)
+			if err != nil {
+				logger.Error(err)
+			}
+
+			var dataB []byte
+			if strings.HasSuffix(m.Photo.File.FilePath, ".webp") {
+				pic, err := webp.Decode(data, &decoder.Options{})
+				if err != nil {
+					logger.Error(err)
+				}
+				buf := new(bytes.Buffer)
+				err = jpeg.Encode(buf, pic, &jpeg.Options{})
+				dataB = buf.Bytes()
+			} else {
+				dataB, err = ioutil.ReadAll(data)
+				if err != nil {
+					logger.Error(err)
+				}
+			}
+
+			GroupImage, err := bot.UploadGroupImage(QInfo.QQNumber, bytes.NewReader(dataB))
+			if err != nil {
+				logger.Error(err)
+			}
+			bot.SendGroupMessage(QInfo.QQNumber, &message.SendingMessage{Elements: []message.IMessageElement{message.NewText(fmt.Sprintf("%s%s %s :发送图片 %s", replyText, m.Sender.FirstName, m.Sender.LastName, m.Caption)), GroupImage}})
+		}()
+	})
+	Bot.Handle(tb.OnSticker, func(m *tb.Message) {
+		if m.Chat.Type != tb.ChatGroup && m.Chat.Type != tb.ChatSuperGroup {
+			return
+		}
+		QInfo, ok := GroupFlag[m.Chat.ID]
+		if !ok || (ok && !QInfo.Flag) {
+			return
+		}
+		if strings.HasPrefix(m.Text, "//") || strings.HasPrefix(m.Caption, "//") {
+			return
+		}
+		replyText := ""
+		if m.ReplyTo != nil {
+			var err error
+			replyText, err = getReplyText(m.ReplyTo)
+			if err != nil {
+				return
+			}
+		}
+		data, err := Bot.GetFile(&m.Sticker.Thumbnail.File)
+		emoji := m.Sticker.Emoji
+
+		var dataB []byte
+		if strings.HasSuffix(m.Sticker.Thumbnail.File.FilePath, ".webp") {
+			pic, err := webp.Decode(data, &decoder.Options{})
+			if err != nil {
+				logger.Error(err)
+			}
+			buf := new(bytes.Buffer)
+			err = jpeg.Encode(buf, pic, &jpeg.Options{Quality: 100})
+			dataB = buf.Bytes()
+		} else {
+			dataB, err = ioutil.ReadAll(data)
+			if err != nil {
+				logger.Error(err)
+			}
+		}
+		GroupImage, err := bot.UploadGroupImage(QInfo.QQNumber, bytes.NewReader(dataB))
+		if err != nil {
+			logger.Error(err)
+		}
+		if err != nil {
+			logger.Error(err)
+		}
+		dataB, err = ioutil.ReadAll(data)
+		if err != nil {
+			logger.Error(err)
+		}
+		go bot.SendGroupMessage(QInfo.QQNumber, &message.SendingMessage{Elements: []message.IMessageElement{message.NewText(fmt.Sprintf("%s%s %s :发送贴纸%s %s", replyText, m.Sender.FirstName, m.Sender.LastName, emoji, m.Caption)), GroupImage}})
+
+	})
+	go Bot.Start()
+
 	bot.OnGroupMessage(func(qqClient *client.QQClient, groupMessage *message.GroupMessage) {
-		tgID,ok:=GroupMap[groupMessage.GroupCode]
+
+		tgID, ok := GroupMap[groupMessage.GroupCode]
+
 		if ok {
-			
+
+			sender := groupMessage.Sender
+			var content string
+			var reply string
+			var at string
+			var hasRich = false
+			for _, ele := range groupMessage.Elements {
+
+				switch o := ele.(type) {
+				case *message.TextElement:
+
+					content += o.Content
+
+				case *message.ReplyElement:
+					reply = parseReply(o)
+					println(groupMessage.ToString())
+				case *message.AtElement:
+					if reply != "" && at == "" {
+						at = fmt.Sprintf("%s (%d)", o.Display, o.Target)
+					} else {
+						content += fmt.Sprintf("%s (%d)", o.Display, o.Target)
+					}
+				case *message.ImageElement:
+					hasRich = true
+					go func() {
+						_, err := Bot.Send(tgID, &tb.Photo{Caption: fmt.Sprintf("%s (%d)☝", sender.DisplayName(), sender.Uin), File: tb.FromURL(o.Url)})
+						if err != nil {
+							logger.Error(err)
+						}
+
+					}()
+
+				case *message.MusicShareElement:
+					hasRich = true
+
+					fmt.Println(o.Title)
+					content += fmt.Sprintf("音乐分享: *%s* %s\n %s", o.Title, o.Brief, o.Url)
+
+				case *message.LightAppElement:
+					hasRich = true
+
+					fmt.Println(o.Content)
+					var app AppModel
+					err := json.Unmarshal([]byte(strings.ReplaceAll(o.Content, "\"ver1\",", "")), &app)
+					if err != nil {
+						logger.Error(err)
+					}
+					switch app.View {
+					case "music":
+						musicInfo := app.Meta.Music
+						fmt.Println(musicInfo.MusicURL)
+
+						if strings.Contains(musicInfo.MusicURL, "music.163.com/song") {
+
+							logger.Info("网易云分享")
+							url := strings.ReplaceAll(strings.ReplaceAll(musicInfo.MusicURL, "http://", "https://"), "/song/me/", "/song/media/")
+
+							go func() {
+								resp, err := http.Get(url)
+								if err != nil {
+									logger.Error(err)
+								}
+
+								fmt.Println(url)
+								_, err = Bot.Send(tgID, &tb.Audio{Title: musicInfo.Title, Performer: musicInfo.Desc, Caption: fmt.Sprintf("来自%s[分享自网易云音乐]", sender.DisplayName()), File: tb.FromReader(resp.Body), Thumbnail: &tb.Photo{File: tb.FromURL(musicInfo.Preview + "?param=300x300")}, MIME: "audio/mpeg"})
+								if err != nil {
+									logger.Error(err)
+								}
+							}()
+
+						} else {
+							logger.Info("其他分享")
+							go func() {
+								resp, err := http.Get(musicInfo.MusicURL)
+								if err != nil {
+									logger.Error(err)
+								}
+								_, err = Bot.Send(tgID, &tb.Audio{Title: musicInfo.Title, Performer: musicInfo.Desc, Caption: fmt.Sprintf("来自%s[分享自%s]", sender.DisplayName(), musicInfo.Tag), File: tb.FromReader(resp.Body), Thumbnail: &tb.Photo{File: tb.FromURL(musicInfo.Preview)}})
+								if err != nil {
+									logger.Error(err)
+								}
+							}()
+						}
+					case "news":
+						newsInfo := app.Meta.News
+						go func() {
+							text := fmt.Sprintf("\\[来自%s\\] * %s *\n%s", MDReplace.Replace(newsInfo.Tag), MDReplace.Replace(newsInfo.Title), MDReplace.Replace(newsInfo.JumpURL))
+							_, err := Bot.Send(tgID, fmt.Sprintf("* %s * \\(_%d_\\) : %s", MDReplace.Replace(sender.DisplayName()), sender.Uin, text), tb.ModeMarkdownV2)
+							if err != nil {
+								logger.Error(err)
+							}
+						}()
+					default:
+						if app.Meta.Detail1.Title != "" {
+							info := app.Meta.Detail1
+							text := fmt.Sprintf("[来自%s] * %s *\n%s", MDReplace.Replace(info.Title), MDReplace.Replace(info.Desc), MDReplace.Replace(info.Qqdocurl))
+							_, err := Bot.Send(tgID, fmt.Sprintf("* %s * \\(_%d_\\) : %s", MDReplace.Replace(sender.DisplayName()), sender.Uin, text), tb.ModeMarkdownV2)
+							if err != nil {
+								logger.Error(err)
+							}
+
+						}
+
+					}
+					return
+
+				}
+			}
+			println(sender, reply, at)
+			//if sender.CardName != "" {
+			//	senderStr=sender.CardName
+			//}else {
+			//	senderStr=sender.DisplayName()
+			//}
+			if len(content) > 0 {
+				go func() {
+					if len(reply) > 0 {
+						text := fmt.Sprintf("\\> *_ %s _* : *_ %s _*\n __\\-\\-\\-\\-\\-\\-\\-\\-__ \n * %s *: %s", MDReplace.Replace(at), MDReplace.Replace(reply), MDReplace.Replace(sender.DisplayName()), MDReplace.Replace(content))
+
+						_, err := Bot.Send(tgID, text, tb.ModeMarkdownV2)
+						if err != nil {
+							logger.Error(err)
+						}
+					} else {
+						_, err := Bot.Send(tgID, fmt.Sprintf("* %s * \\(_%d_\\) : %s", MDReplace.Replace(sender.DisplayName()), sender.Uin, MDReplace.Replace(groupMessage.ToString())), tb.ModeMarkdownV2)
+						if err != nil {
+							logger.Error(err)
+						}
+					}
+
+				}()
+
+			} else if hasRich == false {
+				_, err := Bot.Send(tgID, fmt.Sprintf("* %s * \\(_%d_\\) : %s", MDReplace.Replace(sender.DisplayName()), sender.Uin, MDReplace.Replace(groupMessage.ToString())), tb.ModeMarkdownV2)
+				if err != nil {
+					logger.Error(err)
+				}
+			}
 		}
 
 	})
 }
-func forwardText(b *bot.Bot)  {
+
+func parseReply(m *message.ReplyElement) string {
+	content := ""
+	for _, ele := range m.Elements {
+		switch o := ele.(type) {
+		case *message.TextElement:
+			content += o.Content
+
+		}
+
+	}
+
+	return content
+}
+func forwardText(b *bot.Bot) {
 
 }
 
 func (m *tgForward) Start(bot *bot.Bot) {
-	panic("implement me")
+	//panic("implement me")
 }
 
 func (m *tgForward) Stop(bot *bot.Bot, wg *sync.WaitGroup) {
-	panic("implement me")
+	//panic("implement me")
 }
 
 var instance *tgForward
 var Bot *tb.Bot
+
 func init() {
 	instance = &tgForward{}
 	bot.RegisterModule(instance)
 }
 func (m *tgForward) MiraiGoModule() bot.ModuleInfo {
 	return bot.ModuleInfo{
-		ID:       "internal.logging",
+		ID:       "external.TGForward",
 		Instance: instance,
 	}
 }

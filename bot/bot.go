@@ -36,8 +36,8 @@ var logger = logrus.WithField("bot", "internal")
 func Init() {
 	Instance = &Bot{
 		client.NewClient(
-			config.GlobalConfig.GetInt64("QQbot.account"),
-			config.GlobalConfig.GetString("QQbot.password"),
+			config.GlobalConfig.GetInt64("bot.account"),
+			config.GlobalConfig.GetString("bot.password"),
 		),
 		false,
 	}
@@ -45,6 +45,7 @@ func Init() {
 	if err != nil {
 		logger.WithError(err).Panic("device.json error")
 	}
+
 }
 
 // InitBot 使用 account password 进行初始化账号

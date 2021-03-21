@@ -1,0 +1,13 @@
+Telegram:
+  #Bot Token
+  token:
+  #反代的Bot API 如https://xxx.xxx.com,不需要可留空
+  APIAddr:
+
+bot:
+  account:
+  password:
+
+Groups:
+  #{QQ: QQ群号码, TG:Telegram Chat ID}
+  - { QQ: , TG: }

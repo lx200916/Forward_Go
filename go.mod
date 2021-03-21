@@ -8,6 +8,7 @@ require (
 	github.com/google/go-cmp v0.5.5 // indirect
 	github.com/gopherjs/gopherjs v0.0.0-20210202160940-bed99a852dfe // indirect
 	github.com/jonboulle/clockwork v0.2.2 // indirect
+	github.com/kolesa-team/go-webp v0.0.2
 	github.com/kr/text v0.2.0 // indirect
 	github.com/lestrrat-go/file-rotatelogs v2.4.0+incompatible
 	github.com/lestrrat-go/strftime v1.0.4 // indirect

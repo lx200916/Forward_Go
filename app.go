@@ -9,15 +9,20 @@ import (
 	"github.com/Logiase/MiraiGo-Template/utils"
 
 	_ "github.com/Logiase/MiraiGo-Template/modules/logging"
+	_ "github.com/Logiase/MiraiGo-Template/modules/tgForward"
 )
 
 func init() {
-	utils.WriteLogToFS()
+	//utils.WriteLogToFS()
 	config.Init()
 }
 
 func main() {
 	// 快速初始化
+	//
+	if utils.ReadFile("./device.json") == nil {
+		bot.GenRandomDevice()
+	}
 	bot.Init()
 
 	// 初始化 Modules

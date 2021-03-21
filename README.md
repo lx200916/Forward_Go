@@ -1,124 +1,36 @@
-# MiraiGo-Template
+# MiraiGo-TGForward
 
-A template for MiraiGo
+一个基于`MiraiGo`项目的QQ群<-->TG Chat Group的消息同步机器人.资源占用低(10M左右内存),性能高效.
 
-> v2 版本正在重写，请提出 *你的想法* 或 *你对当前设计的不满* 
-> 本菜鸡会尽量改 
+> 基础配置
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/Logiase/MiraiGo-Template)](https://goreportcard.com/report/github.com/Logiase/MiraiGo-Template)
+账号配置[application.yaml](./application.example.yaml)
 
-基于 [MiraiGo](https://github.com/Mrs4s/MiraiGo) 的多模块组合设计
-
-包装了基础功能,同时设计了一个~~良好~~的项目结构
-
-## 不了解go?
-
-golang 极速入门
-
-[点我看书](https://github.com/justjavac/free-programming-books-zh_CN#go)
-
-## 基础配置
-
-账号配置[application.yaml](./application.yaml)
 ```yaml
+Telegram:
+  #Bot Token
+  token:
+  #反代的Bot API 如https://xxx.xxx.com,不需要可留空
+  APIAddr:
+
 bot:
-  # 账号
-  account: 1234567
-  # 密码
-  password: example
+  #账号
+  account:
+  #密码
+  password:
+
+Groups:
+  #{QQ: QQ群号码, TG:Telegram Chat ID}
+  - { QQ: , TG: }
 ```
 
-## Module 配置
+> 注意:
+>
+> * 消息同步中包括将QQ音乐分享卡片转发到Telegram的功能,当分享的音乐来自国内音乐软件时,需要国内IP才能获取到音乐文件并转发到Telegram.如果部署在国外IP的VPS上,请禁用此功能.
+> * Telegram Bot需要关闭隐私模式.
+> * 如在Docker之外部署,请保证安装`libwebp`软件包,本项目需要它来将`Webp`图像转换为QQ支持的`JPEG`图像.
 
-module参考[log.go](./modules/logging/log.go)
-
-```go
-package mymodule
-
-import (
-    "aaa"
-    "bbb"
-    "MiraiGo-Template/bot"
-)
-
-var instance *Logging
-
-func init() {
-	instance = &Logging{}
-	bot.RegisterModule(instance)
-}
-
-type Logging struct {
-}
-
-// ...
-```
-
-编写自己的Module后在[app.go](./app.go)中启用Module 
-
-```go
-package main
-
-import (
-    // ...
-    
-    _ "modules/mymodule"
-)
-
-// ...
-```
-
-## 快速入门
-
-你可以克隆本项目, 或者将本项目作为依赖.
-
-在开始之前, 你需要首先生成设备文件.
-
-新建文件 `tools_test.go` , 内容如下:
-
-```go
-package main_test
-
-import (
-	"testing"
-
-	"github.com/Logiase/MiraiGo-Template/bot"
-)
-
-func TestGenDevice(t *testing.T) {
-	bot.GenRandomDevice()
-}
-```
-
-然后运行 `TestGenDevice` 来生成一份设备文件
-
-### 克隆
-
-如果你克隆本项目, 请首先更新项目依赖, 同步到协议库最新版本, 否则可能出现某些意外的bug ( 或产生新的bug )
-
-```go
-go get -u
-```
-
-### 将 [MiraiGo-Template](https://github.com/Logiase/MiraiGo-Template) 作为go module使用
-
-可参考当前 [app.go](./app.go) 将其引入
-
-使用这种方法可以引入其他小伙伴编写的第三方module
-
-## 内置 Module
-
- - internal.logging
- 将收到的消息按照格式输出至 os.stdout
-
-## 第三方 Module
-
-欢迎PR
-
- - [logiase.autoreply](https://github.com/Logiase/MiraiGo-module-autoreply)
- 按照收到的消息进行回复
- 
-## 进阶内容 
+## 进阶内容
 
 ### Docker 支持
 
@@ -126,11 +38,18 @@ go get -u
 
 ## 引入的第三方 go module
 
- - [MiraiGo](https://github.com/Mrs4s/MiraiGo)
-    核心协议库
- - [viper](https://github.com/spf13/viper)
-    用于解析配置文件，同时可监听配置文件的修改
- - [logrus](github.com/sirupsen/logrus)
-    功能丰富的Logger
- - [asciiart](github.com/yinghau76/go-ascii-art)
-    用于在console显示图形验证码
+- [MiraiGo](https://github.com/Mrs4s/MiraiGo)
+  核心协议库
+
+- [viper](https://github.com/spf13/viper)
+  用于解析配置文件，同时可监听配置文件的修改
+
+- [logrus](github.com/sirupsen/logrus)
+  功能丰富的Logger
+
+- [asciiart](github.com/yinghau76/go-ascii-art)
+  用于在console显示图形验证码
+
+- [telebot](https://github.com/tucnak/telebot)
+
+  用于调用`Telegram Bot API`

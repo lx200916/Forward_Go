@@ -11,5 +11,5 @@ require (
 	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/viper v1.7.1
 	github.com/yinghau76/go-ascii-art v0.0.0-20190517192627-e7f465a30189
-	gopkg.in/tucnak/telebot.v2 v2.3.5
+	gopkg.in/tucnak/telebot.v2 v2.4.0
 )

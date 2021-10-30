@@ -29,6 +29,8 @@ Groups:
 > * 消息同步中包括将QQ音乐分享卡片转发到Telegram的功能,当分享的音乐来自国内音乐软件时,需要国内IP才能获取到音乐文件并转发到Telegram.如果部署在国外IP的VPS上,请禁用此功能.
 > * Telegram Bot需要关闭隐私模式.
 > * 如在Docker之外部署,请保证安装`libwebp`软件包,本项目需要它来将`Webp`图像转换为QQ支持的`JPEG`图像.
+> * 为确保账号不触发风控，可以尝试先在国内IP家宽环境下运行本程序，将生成的`device.json`打包入镜像，再上传到云服务器。
+> * 如果需要转发`Telegram`端动态贴纸，可以参考 [TGS_Preview](https://github.com/lx200916/TGS_Preview) 项目。
 
 ## 进阶内容
 

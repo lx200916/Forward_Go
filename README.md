@@ -12,6 +12,8 @@ Telegram:
   token:
   #反代的Bot API 如https://xxx.xxx.com,不需要可留空
   APIAddr:
+  #如果有Telegram贴纸预览服务,可在此写入,如 http://xx.xx.com,详情请参照 TGS_Preview 项目.
+  TGSAddr:
 
 bot:
   #账号
@@ -53,5 +55,4 @@ Groups:
   用于在console显示图形验证码
 
 - [telebot](https://github.com/tucnak/telebot)
-
   用于调用`Telegram Bot API`

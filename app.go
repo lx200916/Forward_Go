@@ -6,23 +6,18 @@ import (
 
 	"github.com/Logiase/MiraiGo-Template/bot"
 	"github.com/Logiase/MiraiGo-Template/config"
-	"github.com/Logiase/MiraiGo-Template/utils"
-
 	_ "github.com/Logiase/MiraiGo-Template/modules/logging"
 	_ "github.com/Logiase/MiraiGo-Template/modules/tgForward"
+	"github.com/Logiase/MiraiGo-Template/utils"
 )
 
 func init() {
-	//utils.WriteLogToFS()
+	utils.WriteLogToFS()
 	config.Init()
 }
 
 func main() {
 	// 快速初始化
-	//
-	if utils.ReadFile("./device.json") == nil {
-		bot.GenRandomDevice()
-	}
 	bot.Init()
 
 	// 初始化 Modules

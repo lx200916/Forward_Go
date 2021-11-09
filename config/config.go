@@ -22,7 +22,6 @@ func Init() {
 	GlobalConfig.AddConfigPath(".")
 	GlobalConfig.AddConfigPath("./config")
 
-
 	err := GlobalConfig.ReadInConfig()
 	if err != nil {
 		logrus.WithField("config", "GlobalConfig").WithError(err).Panicf("unable to read global config")

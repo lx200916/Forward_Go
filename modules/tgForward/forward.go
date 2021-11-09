@@ -18,6 +18,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -34,6 +35,9 @@ type QGroupInfo struct {
 	Flag     bool
 }
 
+var regQQReply = regexp.MustCompile(`\((\d+)\) :`)
+var regQQReplyPhoto = regexp.MustCompile(`\((\d+)\)`)
+
 var GroupMap = make(map[int64]*tb.Chat)     //QQGroup-> TGChat Object
 var GroupFlag = make(map[int64]*QGroupInfo) //TGGroup-> Flag
 
@@ -43,6 +47,8 @@ type groupConfig struct {
 }
 
 var MDReplace = strings.NewReplacer("_", "\\_", "*", "\\*", "[", "\\[", "]", "\\]", "(", "\\(", ")", "\\)", "~", "\\~", "`", "\\`", ">", "\\>", "#", "\\#", "+", "\\+", "-", "\\-", "=", "\\=", "|", "\\|", "{", "\\{", "}", "\\}", ".", "\\.", "!", "\\!")
+var emojiRegExp = regexp.MustCompile(`[\x{1F515}\x{1F514}]$`)
+var tgsAddr string
 
 func (m *tgForward) Init() {
 	var err error
@@ -57,14 +63,37 @@ func (m *tgForward) Init() {
 		log.Fatal(err)
 		return
 	}
+	tgsAddr = config.GlobalConfig.GetString("Telegram.TGSAddr")
 	Bot.Handle("/on", func(m *tb.Message) {
 		GroupFlag[m.Chat.ID].Flag = true
-		_, _ = Bot.Send(m.Sender, "通讯已恢复")
+		_, _ = Bot.Send(m.Chat, "通讯已恢复")
+		title := m.Chat.Title
+		match := emojiRegExp.FindStringIndex(title)
+		if match == nil {
+			title = title + "🔔"
+		} else {
+			title = emojiRegExp.ReplaceAllString(title, "🔔")
+		}
+		err := Bot.SetGroupTitle(m.Chat, title)
+		if err != nil {
+			log.Println(err)
+		}
 
 	})
 	Bot.Handle("/off", func(m *tb.Message) {
 		GroupFlag[m.Chat.ID].Flag = false
-		_, _ = Bot.Send(m.Sender, "不明力量截断了电波")
+		_, _ = Bot.Send(m.Chat, "不明力量截断了电波")
+		title := m.Chat.Title
+		match := emojiRegExp.FindStringIndex(title)
+		if match == nil {
+			title = title + "🔕"
+		} else {
+			title = emojiRegExp.ReplaceAllString(title, "🔕")
+		}
+		err := Bot.SetGroupTitle(m.Chat, title)
+		if err != nil {
+			log.Println(err)
+		}
 
 	})
 
@@ -92,9 +121,11 @@ func (m *tgForward) Init() {
 func (m *tgForward) PostInit() {
 	logger.Info("Init Finish")
 }
-func getReplyText(m *tb.Message) (string, error) {
+func getReplyText(m *tb.Message) (string, error, *message.AtElement) {
+	var at *message.AtElement = nil
+
 	if strings.HasPrefix(m.Text, "//") || strings.HasPrefix(m.Caption, "//") {
-		return "", errors.New("stop")
+		return "", errors.New("stop"), at
 	}
 	reply := m
 	typeStr := ""
@@ -104,12 +135,45 @@ func getReplyText(m *tb.Message) (string, error) {
 	if reply.Sticker != nil {
 		typeStr += "[Sticker] "
 	}
+	if reply.Sender.IsBot {
+
+		text := reply.Text
+		if len(reply.Text) == 0 {
+			text = reply.Caption
+
+		}
+		replyList := strings.Split(text, " -------- \n")
+		result1 := regQQReply.FindStringSubmatch(replyList[len(replyList)-1])
+		if len(result1) > 1 {
+			atUid, _ := strconv.ParseInt(result1[1], 10, 64)
+			at = message.NewAt(atUid)
+
+		} else {
+			if reply.Photo != nil {
+				result1 = regQQReplyPhoto.FindStringSubmatch(replyList[len(replyList)-1])
+				if result1 != nil {
+					atUid, _ := strconv.ParseInt(result1[1], 10, 64)
+					at = message.NewAt(atUid)
+
+				}
+			}
+		}
+
+	}
 	replyText := fmt.Sprintf("%s %s :%s%s %s\n-------\n", reply.Sender.FirstName, reply.Sender.LastName, typeStr, reply.Text, reply.Caption)
-	return replyText, nil
+	return replyText, nil, at
 }
 func (m *tgForward) Serve(bot *bot.Bot) {
 	//go getUpdates(Bot.Updates,bot)
+	Bot.Handle(tb.OnNewGroupTitle, func(m *tb.Message) {
+		if m.Sender.ID == Bot.Me.ID {
+			err := Bot.Delete(m)
+			if err != nil {
+				log.Println(err)
 
+			}
+		}
+	})
 	Bot.Handle(tb.OnText, func(m *tb.Message) {
 		if m.Chat.Type != tb.ChatGroup && m.Chat.Type != tb.ChatSuperGroup {
 			return
@@ -122,17 +186,22 @@ func (m *tgForward) Serve(bot *bot.Bot) {
 			return
 		}
 		replyText := ""
+		var atElement *message.AtElement
 		if m.ReplyTo != nil {
 			var err error
-			replyText, err = getReplyText(m.ReplyTo)
+			replyText, err, atElement = getReplyText(m.ReplyTo)
 			if err != nil {
 				return
 			}
 		}
+		messList := &message.SendingMessage{Elements: []message.IMessageElement{message.NewText(fmt.Sprintf("%s%s %s :%s", replyText, m.Sender.FirstName, m.Sender.LastName, m.Text))}}
+		if atElement != nil {
+			messList.Append(atElement)
+		}
 
-		go bot.SendGroupMessage(QInfo.QQNumber, &message.SendingMessage{Elements: []message.IMessageElement{message.NewText(fmt.Sprintf("%s%s %s :%s", replyText, m.Sender.FirstName, m.Sender.LastName, m.Text))}})
-
+		go bot.SendGroupMessage(QInfo.QQNumber, messList)
 	})
+
 	Bot.Handle(tb.OnDocument, func(m *tb.Message) {
 		if m.Chat.Type != tb.ChatGroup && m.Chat.Type != tb.ChatSuperGroup {
 			return
@@ -192,9 +261,11 @@ func (m *tgForward) Serve(bot *bot.Bot) {
 			return
 		}
 		replyText := ""
+		var atElement *message.AtElement = nil
+
 		if m.ReplyTo != nil {
 			var err error
-			replyText, err = getReplyText(m.ReplyTo)
+			replyText, err, atElement = getReplyText(m.ReplyTo)
 			if err != nil {
 				return
 			}
@@ -226,7 +297,12 @@ func (m *tgForward) Serve(bot *bot.Bot) {
 			if err != nil {
 				logger.Error(err)
 			}
-			bot.SendGroupMessage(QInfo.QQNumber, &message.SendingMessage{Elements: []message.IMessageElement{message.NewText(fmt.Sprintf("%s%s %s :发送图片 %s", replyText, m.Sender.FirstName, m.Sender.LastName, m.Caption)), GroupImage}})
+			messList := &message.SendingMessage{Elements: []message.IMessageElement{message.NewText(fmt.Sprintf("%s%s %s :发送图片 %s", replyText, m.Sender.FirstName, m.Sender.LastName, m.Caption)), GroupImage}}
+			if atElement != nil {
+				messList.Append(atElement)
+			}
+
+			bot.SendGroupMessage(QInfo.QQNumber, messList)
 		}()
 	})
 	Bot.Handle(tb.OnSticker, func(m *tb.Message) {
@@ -241,9 +317,11 @@ func (m *tgForward) Serve(bot *bot.Bot) {
 			return
 		}
 		replyText := ""
+		var atElement *message.AtElement = nil
+
 		if m.ReplyTo != nil {
 			var err error
-			replyText, err = getReplyText(m.ReplyTo)
+			replyText, err, atElement = getReplyText(m.ReplyTo)
 			if err != nil {
 				return
 			}
@@ -277,8 +355,14 @@ func (m *tgForward) Serve(bot *bot.Bot) {
 		if err != nil {
 			logger.Error(err)
 		}
-		go bot.SendGroupMessage(QInfo.QQNumber, &message.SendingMessage{Elements: []message.IMessageElement{message.NewText(fmt.Sprintf("%s%s %s :发送贴纸%s %s", replyText, m.Sender.FirstName, m.Sender.LastName, emoji, m.Caption)), GroupImage}})
-
+		messList := &message.SendingMessage{Elements: []message.IMessageElement{message.NewText(fmt.Sprintf("%s%s %s :发送贴纸%s %s", replyText, m.Sender.FirstName, m.Sender.LastName, emoji, m.Caption)), GroupImage}}
+		if atElement != nil {
+			messList.Append(atElement)
+		}
+		go bot.SendGroupMessage(QInfo.QQNumber, messList)
+		if m.Sticker.Animated && len(tgsAddr) > 0 {
+			go bot.SendGroupMessage(QInfo.QQNumber, &message.SendingMessage{Elements: []message.IMessageElement{message.NewText(fmt.Sprintf("%s%s %s :发送动态贴纸%s ,请在网页预览 %s/%s/preview", replyText, m.Sender.FirstName, m.Sender.LastName, emoji, tgsAddr, m.Sticker.FileID))}})
+		}
 	})
 	go Bot.Start()
 
@@ -309,7 +393,7 @@ func (m *tgForward) Serve(bot *bot.Bot) {
 					} else {
 						content += fmt.Sprintf("%s (%d)", o.Display, o.Target)
 					}
-				case *message.ImageElement:
+				case *message.GroupImageElement:
 					hasRich = true
 					go func() {
 						_, err := Bot.Send(tgID, &tb.Photo{Caption: fmt.Sprintf("%s (%d)☝", sender.DisplayName(), sender.Uin), File: tb.FromURL(o.Url)})
@@ -404,7 +488,7 @@ func (m *tgForward) Serve(bot *bot.Bot) {
 			if len(content) > 0 {
 				go func() {
 					if len(reply) > 0 {
-						text := fmt.Sprintf("\\> *_ %s _* : *_ %s _*\n __\\-\\-\\-\\-\\-\\-\\-\\-__ \n * %s *: %s", MDReplace.Replace(at), MDReplace.Replace(reply), MDReplace.Replace(sender.DisplayName()), MDReplace.Replace(content))
+						text := fmt.Sprintf("\\> *_ %s _* : *_ %s _*\n __\\-\\-\\-\\-\\-\\-\\-\\-__ \n * %s * \\(_%d_\\) : %s", MDReplace.Replace(at), MDReplace.Replace(reply), MDReplace.Replace(sender.DisplayName()), sender.Uin, MDReplace.Replace(content))
 
 						_, err := Bot.Send(tgID, text, tb.ModeMarkdownV2)
 						if err != nil {

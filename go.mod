@@ -4,11 +4,10 @@ go 1.15
 
 require (
 	github.com/Baozisoftware/qrcode-terminal-go v0.0.0-20170407111555-c0650d8dff0f
-	github.com/Mrs4s/MiraiGo v0.0.0-20210810070836-6614d2383adb
+	github.com/Mrs4s/MiraiGo v0.0.0-20211216122149-8b99d3147e84
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
 	github.com/gopherjs/gopherjs v0.0.0-20210202160940-bed99a852dfe // indirect
 	github.com/jonboulle/clockwork v0.2.2 // indirect
-	github.com/json-iterator/go v1.1.11 // indirect
 	github.com/kolesa-team/go-webp v1.0.1
 	github.com/kr/text v0.2.0 // indirect
 	github.com/lestrrat-go/file-rotatelogs v2.4.0+incompatible
@@ -29,11 +28,9 @@ require (
 	github.com/tuotoo/qrcode v0.0.0-20190222102259-ac9c44189bf2
 	github.com/willf/bitset v1.2.0 // indirect
 	golang.org/x/sys v0.0.0-20210521090106-6ca3eb03dfc2 // indirect
-	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
-	google.golang.org/protobuf v1.26.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/ini.v1 v1.62.0 // indirect
-	gopkg.in/tucnak/telebot.v2 v2.4.0
+	gopkg.in/tucnak/telebot.v2 v2.5.0
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 )

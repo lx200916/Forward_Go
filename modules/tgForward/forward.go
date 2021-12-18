@@ -14,7 +14,7 @@ import (
 	_ "github.com/kolesa-team/go-webp/decoder"
 	"github.com/kolesa-team/go-webp/webp"
 	tb "gopkg.in/tucnak/telebot.v2"
-	"image/jpeg"
+	"image/png"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -163,6 +163,29 @@ func getReplyText(m *tb.Message) (string, error, *message.AtElement) {
 	replyText := fmt.Sprintf("%s %s :%s%s %s\n-------\n", reply.Sender.FirstName, reply.Sender.LastName, typeStr, reply.Text, reply.Caption)
 	return replyText, nil, at
 }
+func midFWCancel(m *tb.Message) error {
+	if m.Chat.Type != tb.ChatGroup && m.Chat.Type != tb.ChatSuperGroup {
+		return errors.New("stop")
+	}
+	//QInfo, ok := GroupFlag[m.Chat.ID]
+	//if !ok || (ok && !QInfo.Flag) {
+	//	return ""
+	//}
+	if strings.HasPrefix(m.Text, "//") || strings.HasPrefix(m.Caption, "//") {
+		return errors.New("stop")
+	}
+	return nil
+}
+func middleware(m *tb.Message, forwardText string) (string, error) {
+	err := midFWCancel(m)
+	if err != nil {
+		return "", errors.New("stop")
+	}
+	forwardText = fwUserName(m, forwardText)
+	forwardText = fwTGSource(m, forwardText)
+	return forwardText, nil
+}
+
 func (m *tgForward) Serve(bot *bot.Bot) {
 	//go getUpdates(Bot.Updates,bot)
 	Bot.Handle(tb.OnNewGroupTitle, func(m *tb.Message) {
@@ -182,7 +205,11 @@ func (m *tgForward) Serve(bot *bot.Bot) {
 		if !ok || (ok && !QInfo.Flag) {
 			return
 		}
-		if strings.HasPrefix(m.Text, "//") {
+		//if strings.HasPrefix(m.Text, "//") {
+		//	return
+		//}
+		forwardText, err := middleware(m, "")
+		if err != nil {
 			return
 		}
 		replyText := ""
@@ -194,7 +221,7 @@ func (m *tgForward) Serve(bot *bot.Bot) {
 				return
 			}
 		}
-		messList := &message.SendingMessage{Elements: []message.IMessageElement{message.NewText(fmt.Sprintf("%s%s %s :%s", replyText, m.Sender.FirstName, m.Sender.LastName, m.Text))}}
+		messList := &message.SendingMessage{Elements: []message.IMessageElement{message.NewText(fmt.Sprintf("%s%s%s", replyText, forwardText, m.Text))}}
 		if atElement != nil {
 			messList.Append(atElement)
 		}
@@ -210,7 +237,8 @@ func (m *tgForward) Serve(bot *bot.Bot) {
 		if !ok || (ok && !QInfo.Flag) {
 			return
 		}
-		if strings.HasPrefix(m.Text, "//") || strings.HasPrefix(m.Caption, "//") {
+		forwardText, err := middleware(m, "")
+		if err != nil {
 			return
 		}
 		file := m.Document
@@ -229,7 +257,7 @@ func (m *tgForward) Serve(bot *bot.Bot) {
 						logger.Error(err)
 					}
 					buf := new(bytes.Buffer)
-					err = jpeg.Encode(buf, pic, &jpeg.Options{})
+					err = png.Encode(buf, pic)
 					dataB = buf.Bytes()
 				} else {
 					dataB, err = ioutil.ReadAll(data)
@@ -242,7 +270,7 @@ func (m *tgForward) Serve(bot *bot.Bot) {
 				if err != nil {
 					logger.Error(err)
 				}
-				go bot.SendGroupMessage(QInfo.QQNumber, &message.SendingMessage{Elements: []message.IMessageElement{message.NewText(fmt.Sprintf("%s %s :发送图片 %s", m.Sender.FirstName, m.Sender.LastName, m.Caption)), GroupImage}})
+				go bot.SendGroupMessage(QInfo.QQNumber, &message.SendingMessage{Elements: []message.IMessageElement{message.NewText(fmt.Sprintf("%s发送图片 %s", forwardText, m.Caption)), GroupImage}})
 
 			}()
 		}
@@ -257,7 +285,8 @@ func (m *tgForward) Serve(bot *bot.Bot) {
 		if !ok || (ok && !QInfo.Flag) {
 			return
 		}
-		if strings.HasPrefix(m.Text, "//") || strings.HasPrefix(m.Caption, "//") {
+		forwardText, err := middleware(m, "")
+		if err != nil {
 			return
 		}
 		replyText := ""
@@ -284,7 +313,7 @@ func (m *tgForward) Serve(bot *bot.Bot) {
 					logger.Error(err)
 				}
 				buf := new(bytes.Buffer)
-				err = jpeg.Encode(buf, pic, &jpeg.Options{})
+				err = png.Encode(buf, pic)
 				dataB = buf.Bytes()
 			} else {
 				dataB, err = ioutil.ReadAll(data)
@@ -297,7 +326,7 @@ func (m *tgForward) Serve(bot *bot.Bot) {
 			if err != nil {
 				logger.Error(err)
 			}
-			messList := &message.SendingMessage{Elements: []message.IMessageElement{message.NewText(fmt.Sprintf("%s%s %s :发送图片 %s", replyText, m.Sender.FirstName, m.Sender.LastName, m.Caption)), GroupImage}}
+			messList := &message.SendingMessage{Elements: []message.IMessageElement{message.NewText(fmt.Sprintf("%s%s发送图片 %s", replyText, forwardText, m.Caption)), GroupImage}}
 			if atElement != nil {
 				messList.Append(atElement)
 			}
@@ -313,7 +342,8 @@ func (m *tgForward) Serve(bot *bot.Bot) {
 		if !ok || (ok && !QInfo.Flag) {
 			return
 		}
-		if strings.HasPrefix(m.Text, "//") || strings.HasPrefix(m.Caption, "//") {
+		forwardText, err := middleware(m, "")
+		if err != nil {
 			return
 		}
 		replyText := ""
@@ -336,7 +366,7 @@ func (m *tgForward) Serve(bot *bot.Bot) {
 				logger.Error(err)
 			}
 			buf := new(bytes.Buffer)
-			err = jpeg.Encode(buf, pic, &jpeg.Options{Quality: 100})
+			err = png.Encode(buf, pic)
 			dataB = buf.Bytes()
 		} else {
 			dataB, err = ioutil.ReadAll(data)
@@ -355,13 +385,13 @@ func (m *tgForward) Serve(bot *bot.Bot) {
 		if err != nil {
 			logger.Error(err)
 		}
-		messList := &message.SendingMessage{Elements: []message.IMessageElement{message.NewText(fmt.Sprintf("%s%s %s :发送贴纸%s %s", replyText, m.Sender.FirstName, m.Sender.LastName, emoji, m.Caption)), GroupImage}}
+		messList := &message.SendingMessage{Elements: []message.IMessageElement{message.NewText(fmt.Sprintf("%s%s发送贴纸%s %s", replyText, forwardText, emoji, m.Caption)), GroupImage}}
 		if atElement != nil {
 			messList.Append(atElement)
 		}
 		go bot.SendGroupMessage(QInfo.QQNumber, messList)
 		if m.Sticker.Animated && len(tgsAddr) > 0 {
-			go bot.SendGroupMessage(QInfo.QQNumber, &message.SendingMessage{Elements: []message.IMessageElement{message.NewText(fmt.Sprintf("%s%s %s :发送动态贴纸%s ,请在网页预览 %s/%s/preview", replyText, m.Sender.FirstName, m.Sender.LastName, emoji, tgsAddr, m.Sticker.FileID))}})
+			go bot.SendGroupMessage(QInfo.QQNumber, &message.SendingMessage{Elements: []message.IMessageElement{message.NewText(fmt.Sprintf("%s%s发送动态贴纸%s ,请在网页预览 %s/%s/preview", replyText, forwardText, emoji, tgsAddr, m.Sticker.FileID))}})
 		}
 	})
 	go Bot.Start()

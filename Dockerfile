@@ -1,4 +1,4 @@
-FROM golang:alpine3.13 as builder
+FROM golang:alpine3.15 as builder
 
 ENV GOPROXY=https://goproxy.cn
 
@@ -12,7 +12,7 @@ RUN apk update \
             && rm -rf /var/cache/apk/*
 RUN go build -o MiraiGo .
 
-FROM alpine:3.13 as runner
+FROM alpine:3.15 as runner
 #RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apk/repositories
 RUN apk update \
             && apk upgrade \

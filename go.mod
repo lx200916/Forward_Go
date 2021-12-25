@@ -14,6 +14,7 @@ require (
 	github.com/lestrrat-go/strftime v1.0.4 // indirect
 	github.com/magiconair/properties v1.8.5 // indirect
 	github.com/mitchellh/mapstructure v1.4.1 // indirect
+	github.com/orcaman/concurrent-map v1.0.0
 	github.com/pelletier/go-toml v1.9.1 // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/rifflock/lfshook v0.0.0-20180920164130-b9218ef580f5

@@ -35,6 +35,7 @@ func (m *logging) PostInit() {
 	// 第二次初始化
 	// 再次过程中可以进行跨Module的动作
 	// 如通用数据库等等
+
 }
 
 func (m *logging) Serve(b *bot.Bot) {
@@ -121,27 +122,27 @@ func logDisconnect(event *client.ClientDisconnectedEvent) {
 }
 
 func registerLog(b *bot.Bot) {
-	b.OnGroupMessageRecalled(func(qqClient *client.QQClient, event *client.GroupMessageRecalledEvent) {
+	b.GroupMessageRecalledEvent.Subscribe(func(qqClient *client.QQClient, event *client.GroupMessageRecalledEvent) {
 		logGroupMessageRecallEvent(event)
 	})
-
-	b.OnGroupMessage(func(qqClient *client.QQClient, groupMessage *message.GroupMessage) {
+	//
+	b.GroupMessageEvent.Subscribe(func(qqClient *client.QQClient, groupMessage *message.GroupMessage) {
 		logGroupMessage(groupMessage)
 	})
-
-	b.OnGroupMuted(func(qqClient *client.QQClient, event *client.GroupMuteEvent) {
-		logGroupMuteEvent(event)
-	})
-
-	b.OnPrivateMessage(func(qqClient *client.QQClient, privateMessage *message.PrivateMessage) {
-		logPrivateMessage(privateMessage)
-	})
-
-	b.OnFriendMessageRecalled(func(qqClient *client.QQClient, event *client.FriendMessageRecalledEvent) {
-		logFriendMessageRecallEvent(event)
-	})
-
-	b.OnDisconnected(func(qqClient *client.QQClient, event *client.ClientDisconnectedEvent) {
+	//
+	//b.OnGroupMuted(func(qqClient *client.QQClient, event *client.GroupMuteEvent) {
+	//	logGroupMuteEvent(event)
+	//})
+	//
+	//b.OnPrivateMessage(func(qqClient *client.QQClient, privateMessage *message.PrivateMessage) {
+	//	logPrivateMessage(privateMessage)
+	//})
+	//
+	//b.OnFriendMessageRecalled(func(qqClient *client.QQClient, event *client.FriendMessageRecalledEvent) {
+	//	logFriendMessageRecallEvent(event)
+	//})
+	//
+	b.DisconnectedEvent.Subscribe(func(qqClient *client.QQClient, event *client.ClientDisconnectedEvent) {
 		logDisconnect(event)
 	})
 }

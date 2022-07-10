@@ -55,3 +55,15 @@ type AppModel struct {
 		} `json:"detail_1"`
 	} `json:"meta"`
 }
+
+type TGMember struct {
+	UserName  string `json:"user_name,omitempty"`
+	FirstName string `json:"first_name,omitempty"`
+	LastName  string `json:"last_name,omitempty"`
+	UserID    int64  `json:"user_id,omitempty"`
+}
+
+//type TGMembers struct {
+//	FirstName string `json:"firstName"`
+//	Array     []TGMember
+//}
